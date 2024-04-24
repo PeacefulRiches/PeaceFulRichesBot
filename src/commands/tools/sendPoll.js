@@ -6,6 +6,7 @@ const {
   EmbedBuilder,
   ButtonStyle,
 } = require("discord.js");
+const { dbclient } = require("../../utils/connectToDB.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -67,6 +68,8 @@ module.exports = {
       return;
     }
 
+    const pollID = crypto.randomUUID();
+
     let pollChoices = [
       interaction.options.getString("choice1"),
       interaction.options.getString("choice2"),
@@ -76,8 +79,6 @@ module.exports = {
     ];
     const pollTitle = interaction.options.getString("title");
     const pollDescription = interaction.options.getString("description");
-
-    console.log(pollChoices);
 
     const embedFields = [
       { name: " ", value: `**1.** ${pollChoices[0]}` },
@@ -127,18 +128,18 @@ module.exports = {
     let button5;
 
     button1 = new ButtonBuilder()
-      .setCustomId("pollOption1")
+      .setCustomId("poll[" + pollID + "]" + "(" + pollChoices[0] + ")")
       .setLabel(pollChoices[0])
       .setStyle(ButtonStyle.Primary);
 
     button2 = new ButtonBuilder()
-      .setCustomId("pollOption2")
+      .setCustomId("poll[" + pollID + "]" + "(" + pollChoices[1] + ")")
       .setLabel(pollChoices[1])
       .setStyle(ButtonStyle.Primary);
 
     if (pollChoices[2] !== null) {
       button3 = new ButtonBuilder()
-        .setCustomId("pollOption3")
+        .setCustomId("poll[" + pollID + "]" + "(" + pollChoices[2] + ")")
         .setLabel(pollChoices[2])
         .setStyle(ButtonStyle.Primary);
     } else {
@@ -147,7 +148,7 @@ module.exports = {
 
     if (pollChoices[3] !== null) {
       button4 = new ButtonBuilder()
-        .setCustomId("pollOption4")
+        .setCustomId("poll[" + pollID + "]" + "(" + pollChoices[3] + ")")
         .setLabel(pollChoices[3])
         .setStyle(ButtonStyle.Primary);
     } else {
@@ -156,7 +157,7 @@ module.exports = {
 
     if (pollChoices[4] !== null) {
       button5 = new ButtonBuilder()
-        .setCustomId("pollOption5")
+        .setCustomId("poll[" + pollID + "]" + "(" + pollChoices[4] + ")")
         .setLabel(pollChoices[4])
         .setStyle(ButtonStyle.Primary);
     } else {
@@ -192,6 +193,33 @@ module.exports = {
     // Define the rate limit parameters
     const messagesPerMinute = 20; // Maximum number of messages per minute
     const interval = 60000 / messagesPerMinute; // Interval between each message in milliseconds
+
+    try {
+      // Register Poll to DB
+      await dbclient.query(
+        `INSERT INTO "polls" (uuid, title) VALUES ($1, $2)`,
+        [pollID, pollTitle]
+      );
+
+      // Register the Options of the Poll to the DB
+      await Promise.all(
+        pollChoices.map(async (choice) => {
+          if (choice === null) {
+            return;
+          } else {
+            const queryText = `INSERT INTO "options" (poll_uuid, option_text) VALUES ($1, $2)`;
+            await dbclient.query(queryText, [pollID, choice]);
+          }
+        })
+      );
+    } catch (error) {
+      console.log(
+        "An error occurred with updating the currently active poll",
+        error
+      );
+      interaction.reply("Could not Execute Poll Command, DB Write error");
+      return;
+    }
 
     // Iterate over each member and send the message with the row component
     for (const [index, guildMember] of guildMembers.entries()) {
